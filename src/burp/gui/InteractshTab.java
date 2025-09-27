@@ -52,6 +52,7 @@ import javax.swing.table.TableRowSorter;
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.ui.editor.HttpRequestEditor;
 import burp.api.montoya.ui.editor.HttpResponseEditor;
+import burp.gui.ToastNotification.MessageType;
 import burp.listeners.InteractshListener;
 import interactsh.InteractshEntry;
 import layout.SpringUtilities;
@@ -90,7 +91,10 @@ public class InteractshTab extends JComponent {
 
 	public InteractshTab(MontoyaApi api) {
 		this.api = api;
-		this.listener = new InteractshListener(null);
+		this.listener = new InteractshListener(
+			newUrl -> ToastNotification.showToast(this, "✓ Interactsh session ready.", MessageType.SUCCESS),
+			errorMsg -> ToastNotification.showToast(this, "❌ " + errorMsg, MessageType.ERROR)
+		);
 
 		setLayout(new BoxLayout(this, BoxLayout.PAGE_AXIS));
 
@@ -181,21 +185,37 @@ public class InteractshTab extends JComponent {
 
 		generateUrlButton.addActionListener(e -> {
 			listener.close();
-			listener = new InteractshListener(newUrl -> {
-				StringSelection stringSelection = new StringSelection(newUrl);
-				try {
-					Toolkit.getDefaultToolkit().getSystemClipboard().setContents(stringSelection,
-							null);
-					Toolkit.getDefaultToolkit().getSystemSelection().setContents(stringSelection,
-							null);
-				} catch (Exception ex) {
-					api.logging().logToError("Clipboard issue: " + ex.getMessage());
-				}
-				api.logging().logToOutput("Generated and copied new Interact.sh URL: " + newUrl);
-			});
+			listener = new InteractshListener(
+				newUrl -> {
+					StringSelection stringSelection = new StringSelection(newUrl);
+					try {
+						Toolkit.getDefaultToolkit().getSystemClipboard().setContents(stringSelection,
+								null);
+						Toolkit.getDefaultToolkit().getSystemSelection().setContents(stringSelection,
+								null);
+					} catch (Exception ex) {
+						api.logging().logToError("Clipboard issue: " + ex.getMessage());
+					}
+					api.logging().logToOutput("Generated and copied new Interact.sh URL: " + newUrl);
+					ToastNotification.showToast(this, "✓ Regenerated and copied new Interact.sh URL.", MessageType.SUCCESS);
+				},
+				errorMsg -> ToastNotification.showToast(this, "❌ " + errorMsg, MessageType.ERROR)
+			);
 		});
-		copyUrlButton.addActionListener(e -> this.listener.copyCurrentUrlToClipboard());
-		refreshButton.addActionListener(e -> this.listener.pollNowAll());
+		copyUrlButton.addActionListener(e -> {
+			if (this.listener.copyCurrentUrlToClipboard()) {
+				ToastNotification.showToast(this, "URL copied to clipboard.", MessageType.INFO);
+			} else {
+				ToastNotification.showToast(this, "❌ Failed to copy. Client not ready or registered.", MessageType.ERROR);
+			}
+		});
+		refreshButton.addActionListener(e -> {
+			if (this.listener.pollNowAll()) {
+				ToastNotification.showToast(this, "Session refreshed.", MessageType.INFO);
+			} else {
+				ToastNotification.showToast(this, "❌ Failed to refresh session.", MessageType.ERROR);
+			}
+		});
 		clearLogButton.addActionListener(e -> this.clearLog());
 
 		controlsPanel.add(generateUrlButton);
@@ -294,11 +314,18 @@ public class InteractshTab extends JComponent {
 					listener.close();
 				}
 				this.listener.close();
-				this.listener = new InteractshListener(null);
+				this.listener = new InteractshListener(
+					newUrl -> ToastNotification.showToast(this, "✓ New session started with updated config.", MessageType.SUCCESS),
+					errorMsg -> ToastNotification.showToast(this, "❌ " + errorMsg, MessageType.ERROR)
+				);
 			} else {
 				api.logging().logToOutput("Poll interval updated. Triggering immediate poll.");
 				if (listener != null) {
-					listener.pollNowAll();
+					if (listener.pollNowAll()) {
+						ToastNotification.showToast(this, "Poll interval updated.", MessageType.SUCCESS);
+					} else {
+						ToastNotification.showToast(this, "❌ Failed to update poll interval.", MessageType.ERROR);
+					}
 				}
 			}
 		});

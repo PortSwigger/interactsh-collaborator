@@ -17,12 +17,12 @@ public class InteractshListener {
 	private final Semaphore pollSignal = new Semaphore(0);
 
 
-	public InteractshListener(Consumer<String> onReadyCallback) {
+	public InteractshListener(Consumer<String> onReadyCallback, Consumer<String> onFailureCallback) {
 		this.executor = Executors.newSingleThreadExecutor();
-		this.executor.submit(() -> pollingLoop(onReadyCallback));
+		this.executor.submit(() -> pollingLoop(onReadyCallback, onFailureCallback));
 	}
 
-	private void pollingLoop(Consumer<String> onReadyCallback) {
+	private void pollingLoop(Consumer<String> onReadyCallback, Consumer<String> onFailureCallback) {
 		this.client = new InteractshClient();
 		try {
 			if (client.register()) {
@@ -40,10 +40,18 @@ public class InteractshListener {
 					}
 				}
 			} else {
-				burp.BurpExtender.api.logging().logToError("Unable to register interactsh client");
+				String errorMsg = "Unable to register interactsh client. Check config.";
+				burp.BurpExtender.api.logging().logToError(errorMsg);
+				if (onFailureCallback != null) {
+					SwingUtilities.invokeLater(() -> onFailureCallback.accept(errorMsg));
+				}
 			}
 		} catch (Exception ex) {
-			burp.BurpExtender.api.logging().logToError(ex.getMessage());
+			String errorMsg = "Error during registration: " + ex.getMessage();
+			burp.BurpExtender.api.logging().logToError(errorMsg, ex); // Log the full exception
+			if (onFailureCallback != null) {
+				SwingUtilities.invokeLater(() -> onFailureCallback.accept(errorMsg));
+			}
 		} finally {
 			if (client != null && client.isRegistered()) {
 				client.deregister();
@@ -63,29 +71,49 @@ public class InteractshListener {
 		}
 	}
 
-	public void pollNowAll() {
+	public boolean pollNowAll() {
 		InteractshClient currentClient = this.client;
 		if (currentClient != null && currentClient.isRegistered()) {
 			pollSignal.release();
 		}
+		return currentClient != null && currentClient.isRegistered();
 	}
 
-	public void copyCurrentUrlToClipboard() {
+	public boolean copyCurrentUrlToClipboard() {
 		InteractshClient currentClient = this.client;
-		if (currentClient != null) {
+		if (currentClient != null && currentClient.isRegistered()) {
 			String interactDomain = currentClient.getInteractDomain();
-			burp.BurpExtender.api.logging()
-					.logToOutput("New domain in this session is: " + interactDomain);
 			StringSelection stringSelection = new StringSelection(interactDomain);
+
+			boolean atLeastOneSucceeded = false;
+
+			// Try to copy to the system clipboard (Windows, macOS, Linux clipboard)
 			try {
-				Toolkit.getDefaultToolkit().getSystemClipboard().setContents(stringSelection, null);
-				Toolkit.getDefaultToolkit().getSystemSelection().setContents(stringSelection, null);
+				java.awt.Toolkit.getDefaultToolkit().getSystemClipboard().setContents(stringSelection, null);
+				atLeastOneSucceeded = true;
+				burp.BurpExtender.api.logging().logToOutput("Successfully copied to system clipboard.");
 			} catch (Exception e) {
-				burp.BurpExtender.api.logging().logToError("Clipboard issue: " + e.getMessage());
+				burp.BurpExtender.api.logging().logToError("Could not copy to system clipboard: " + e.getMessage());
 			}
+
+			// Try to copy to the system selection clipboard (for Linux primary selection)
+			try {
+				java.awt.datatransfer.Clipboard systemSelection = java.awt.Toolkit.getDefaultToolkit().getSystemSelection();
+				if (systemSelection != null) {
+					systemSelection.setContents(stringSelection, null);
+					atLeastOneSucceeded = true;
+					burp.BurpExtender.api.logging().logToOutput("Successfully copied to system selection.");
+				}
+			} catch (Exception e) {
+				burp.BurpExtender.api.logging().logToError("Could not copy to system selection: " + e.getMessage());
+			}
+
+			return atLeastOneSucceeded;
+
 		} else {
 			burp.BurpExtender.api.logging()
-					.logToError("Interact.sh client is not yet initialized.");
+					.logToError("Interact.sh client is not yet initialized or registered.");
+			return false;
 		}
 	}
 }
