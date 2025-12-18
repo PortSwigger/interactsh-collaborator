@@ -47,8 +47,7 @@ public class InteractshClient {
 		KeyPair kp = generateKeys();
 		this.publicKey = kp.getPublic();
 		this.privateKey = kp.getPrivate();
-		this.pubKeyBase64 =
-				Base64.getEncoder().encodeToString(getPublicKey().getBytes(StandardCharsets.UTF_8));
+		this.pubKeyBase64 = Base64.getEncoder().encodeToString(getPublicKey().getBytes(StandardCharsets.UTF_8));
 
 		this.host = burp.gui.Config.getHost();
 		this.scheme = burp.gui.Config.getScheme();
@@ -89,6 +88,12 @@ public class InteractshClient {
 			HttpRequest httpRequest = HttpRequest.httpRequest(httpService, request);
 			HttpResponse resp = burp.BurpExtender.api.http().sendRequest(httpRequest).response();
 
+			if (resp == null) {
+				burp.BurpExtender.api.logging().logToError(
+						"Registration failed: No response received from server. Check your connection/host settings.");
+				return false;
+			}
+
 			if (resp.statusCode() == 200) {
 				this.registered = true;
 				burp.BurpExtender.api.logging().logToOutput("Session registration was successful.");
@@ -128,7 +133,7 @@ public class InteractshClient {
 		HttpService httpService = HttpService.httpService(host, port, scheme);
 		HttpRequest httpRequest = HttpRequest.httpRequest(httpService, request);
 		HttpResponse resp = burp.BurpExtender.api.http().sendRequest(httpRequest).response();
-		if (resp.statusCode() != 200) {
+		if (resp == null || resp.statusCode() != 200) {
 			burp.BurpExtender.api.logging().logToError("Session with correlation ID "
 					+ correlationId + " was unsuccessful - status returned: " + resp.statusCode());
 			return false;
@@ -227,8 +232,7 @@ public class InteractshClient {
 
 	private String getPublicKey() {
 		String pubKey = "-----BEGIN PUBLIC KEY-----\n";
-		String[] chunks =
-				splitStringEveryN(Base64.getEncoder().encodeToString(publicKey.getEncoded()), 64);
+		String[] chunks = splitStringEveryN(Base64.getEncoder().encodeToString(publicKey.getEncoded()), 64);
 		for (String chunk : chunks) {
 			pubKey += chunk + "\n";
 		}
