@@ -11,14 +11,18 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.Random;
 import java.util.UUID;
+
 import javax.crypto.Cipher;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.OAEPParameterSpec;
 import javax.crypto.spec.PSource;
 import javax.crypto.spec.SecretKeySpec;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
+
 import com.github.shamil.Xid;
+
 import burp.api.montoya.http.HttpService;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.http.message.responses.HttpResponse;

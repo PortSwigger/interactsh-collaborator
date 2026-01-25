@@ -1,11 +1,13 @@
 package interactsh;
 
-import org.json.*;
-
 import java.time.Instant;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.http.message.responses.HttpResponse;
+import interactsh.formatters.FormatterRegistry;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -82,48 +84,24 @@ public class InteractshEntry {
 		this.timestamp = Instant.parse(jsonObject.getString("timestamp"));
 		this.rawRequest = jsonObject.optString("raw-request", "");
 		this.rawResponse = jsonObject.optString("raw-response", "");
-		if (this.protocol.equals("http")) {
+
+		if (this.protocol.equals("http") || this.protocol.equals("https")) {
 			this.httpRequest = HttpRequest.httpRequest(rawRequest);
 			this.httpResponse = HttpResponse.httpResponse(rawResponse);
+			this.details = (this.httpRequest == null) ? formatDetails(jsonObject) : "";
 		} else {
 			this.httpRequest = null;
 			this.httpResponse = null;
+			this.details = formatDetails(jsonObject);
 		}
-		this.details = processDetails(protocol, jsonObject);
 	}
 
-	private String processDetails(String protocol, JSONObject obj) throws JSONException {
-		String result;
-		switch (protocol) {
-			case "dns":
-				result = "Query Type: " + obj.getString("q-type") + "\n\n";
-				result += "Request: \n" + obj.getString("raw-request") + "\n";
-				result += "Response: \n" + obj.getString("raw-response") + "\n";
-				break;
-			case "ftp":
-				result = "FTP From: " + obj.getString("remote-address") + "\n\n";
-				result += "Request: \n" + obj.getString("raw-request") + "\n";
-				break;
-			case "http":
-				result = "Request: \n" + obj.getString("raw-request") + "\n";
-				result += "Response: \n" + obj.getString("raw-response") + "\n";
-				break;
-			case "ldap":
-				result = "LDAP From: " + obj.getString("remote-address") + "\n\n";
-				result += "Request: \n" + obj.getString("raw-request") + "\n";
-				break;
-			case "responder":
-			case "smb":
-				result = "Request: \n" + obj.getString("raw-request") + "\n";
-				break;
-			case "smtp":
-				result = "SMTP From: " + obj.getString("smtp-from") + "\n\n";
-				result += "Request: \n" + obj.getString("raw-request") + "\n";
-				break;
-			default:
-				result = "UNSUPPORTED PROTOCOL";
+	private String formatDetails(JSONObject obj) {
+		try {
+			return FormatterRegistry.get(protocol).format(obj);
+		} catch (Exception e) {
+			return "Error formatting interaction:\n" + e.getMessage() + "\n\nRaw data:\n" + obj.toString(2);
 		}
-		return result;
 	}
 
 	public String toString() {
