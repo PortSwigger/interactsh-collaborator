@@ -1,0 +1,13 @@
+Uuid: 5fe7275acadd4603bf92cecb02c30b6d
+ExtensionType: 1
+Name: Interactsh Collaborator
+RepoName: interactsh-collaborator
+ScreenVersion: 1.2.0
+SerialVersion: 1
+MinPlatformVersion: 25
+ProOnly: True
+Author: Arqsz
+ShortDescription: The extension is used for out-of-band testing with Interactsh in Burp Suite, supporting multiple protocols, real-time monitoring, readable protocol displays, interaction logging, and URL copying.
+EntryPoint: collaborator-1.3.0-jar-with-dependencies.jar
+BuildCommand: mvn clean install && mvn test
+SupportedProducts: Pro
