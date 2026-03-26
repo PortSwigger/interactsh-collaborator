@@ -1,66 +1,33 @@
-<p>A Burp Suite extension for out-of-band (OOB) testing called Interactsh Collaborator - Revised. It is an enhanced tool that effortlessly integrates with Interactsh, providing unique domains for OOB tests. It supports multiple protocols and features real-time monitoring. It not only seamlessly integrates with Burps default Collaborator, but also ensures the interface is user-friendly and easy to operate.</p>
+<p>
+    Interactsh Collaborator integrates the Interactsh out-of-band (OOB) interaction server into Burp Suite, giving
+    testers a dedicated tab for generating unique OOB payloads and monitoring incoming interactions across DNS,
+    HTTP/HTTPS, SMTP, FTP, LDAP, and SMB protocols. This can be used alongside Burp's native Collaborator server for OOB
+    testing.
+</p>
 
 <h2>Features</h2>
-
-<p><strong>Core Functionality</strong></p>
-
 <ul>
-<li><strong>Interactsh Integration</strong>: Generate unique Interactsh domains for OOB testing</li>
-<li><strong>Multiple Protocol Support</strong>: DNS, HTTP/HTTPS, SMTP, FTP, LDAP, SMB</li>
-<li><strong>Real-time Monitoring</strong>: Automatic polling for interactions with configurable intervals</li>
-<li><strong>Burp Integration</strong>: Works alongside Burps native Collaborator</li>
-</ul>
-
-<p><strong>User Interface</strong></p>
-
-<ul>
-<li><strong>Protocol Formatting</strong>: Clean, readable display for each protocol type with different presentation styles for DNS, SMTP, FTP, LDAP, SMB/Responder, and HTTP/HTTPS.</li>
-<li><strong>Interactive Table</strong>: Sortable, filterable interaction log</li>
-<li><strong>Unread Tracking</strong>: Visual indication of new interactions</li>
-<li><strong>Copy to Clipboard</strong>: One-click URL copying</li>
-<li><strong>Protocol Filtering</strong>: Filter by protocol type (All, HTTP, DNS, SMTP, LDAP, SMB, FTP)</li>
+    <li>Generates unique Interactsh payload URLs, available via a one-click copy button or the right-click context menu
+        anywhere in Burp</li>
+    <li>Monitors interactions in real-time with configurable polling intervals, displaying each result in a sortable,
+        filterable log table</li>
+    <li>Protocol-aware detail views: HTTP/HTTPS interactions render in Burp's native request and response editors; DNS,
+        SMTP, FTP, LDAP, and SMB interactions display formatted, structured text</li>
+    <li>Highlights unread interactions in bold and shows an unread count on the Interactsh tab</li>
+    <li>Supports self-hosted or alternative Interactsh servers, configurable with custom hostname, port, TLS toggle, and
+        authorization token</li>
+    <li>Sessions use RSA-2048 key exchange and AES-encrypted polling, matching the Interactsh protocol</li>
 </ul>
 
 <h2>Usage</h2>
-
-<p><strong>Basic Workflow</strong></p>
-
 <ol>
-<li>Go to the Interactsh tab in Burp Suite</li>
-<li>Use the Copy URL to clipboard function to copy the Interactsh URL</li>
-<li>Integrate the URL into your tests (e.g., inject into parameters, headers, etc.)</li>
-<li>Watch the interactions in real-time in the table</li>
+    <li>Navigate to the "Interactsh" tab and click "Copy URL to clipboard" to copy the current payload URL, or right-click
+        anywhere in Burp and select "Copy Interactsh URL".</li>
+    <li>Inject the URL into a parameter, header, or other input in your test target and trigger a request.</li>
+    <li>Watch the Logs table for incoming interactions; click a row to view full details. Use the filter buttons (All,
+        HTTP, DNS, SMTP, LDAP, SMB, FTP) to focus on a specific protocol.</li>
+    <li>To start a fresh session, click "Regenerate Interactsh Session". To poll immediately rather than waiting for the
+        next interval, click "Refresh".</li>
+    <li>To use a self-hosted server, open the "Configuration" tab, enter your server hostname, port, and authorization
+        token, enable or disable TLS, then click "Update Settings".</li>
 </ol>
-
-<p><strong>Buttons and Controls</strong></p>
-
-<ul>
-<li><strong>Copy URL to clipboard</strong>&rarr; Copies the current Interactsh URL to clipboard</li>
-<li><strong>Regenerate Interactsh Session</strong>&rarr; Generates a new session with a new URL</li>
-<li><strong>Refresh</strong>&rarr; Manually triggers a poll for new interactions</li>
-<li><strong>Clear log</strong>&rarr; Removes all interactions from the table</li>
-<li><strong>Poll Time</strong>&rarr; Shows the current polling interval (seconds)</li>
-</ul>
-
-<p><strong>Protocol Filtering</strong></p>
-
-<p>Use the filter buttons to only view specific protocol types:</p>
-
-<ul>
-<li><strong>All</strong> - Shows all interactions</li>
-<li><strong>HTTP</strong> - Only displays HTTP/HTTPS</li>
-<li><strong>DNS</strong> - Only displays DNS queries</li>
-<li><strong>SMTP</strong> - Only displays email interactions</li>
-<li><strong>LDAP</strong> - Only displays LDAP queries</li>
-<li><strong>SMB</strong> - Only displays SMB/Responder</li>
-<li><strong>FTP</strong> - Only displays FTP connections</li>
-</ul>
-
-<p><strong>Table Features</strong></p>
-
-<ul>
-<li>Click a row to view more information</li>
-<li>Sort by column by clicking column headers</li>
-<li>New interactions are highlighted in bold</li>
-<li>Select cells/rows to copy data to clipboard</li>
-</ul>

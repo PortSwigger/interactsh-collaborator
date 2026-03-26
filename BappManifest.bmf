@@ -7,7 +7,7 @@ SerialVersion: 1
 MinPlatformVersion: 25
 ProOnly: True
 Author: Arqsz
-ShortDescription: The extension is used for out-of-band testing with Interactsh in Burp Suite, supporting multiple protocols, real-time monitoring, readable protocol displays, interaction logging, and URL copying.
+ShortDescription: Integrates with Interactsh for OOB testing, for use alongside Burp's Collaborator server.
 EntryPoint: collaborator-1.3.0-jar-with-dependencies.jar
-BuildCommand: mvn clean install && mvn test
+BuildCommand: mvn clean package
 SupportedProducts: Pro
