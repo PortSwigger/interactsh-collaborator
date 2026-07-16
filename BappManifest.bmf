@@ -2,12 +2,12 @@ Uuid: 5fe7275acadd4603bf92cecb02c30b6d
 ExtensionType: 1
 Name: Interactsh Collaborator
 RepoName: interactsh-collaborator
-ScreenVersion: 1.2.0
-SerialVersion: 2
-MinPlatformVersion: 25
+ScreenVersion: 1.4.0
+SerialVersion: 3
+MinPlatformVersion: 30
 ProOnly: True
 Author: Arqsz
 ShortDescription: Integrates with Interactsh for OOB testing, for use alongside Burp's Collaborator server.
-EntryPoint: collaborator-1.3.0-jar-with-dependencies.jar
+EntryPoint: collaborator-1.4.0.jar
 BuildCommand: mvn clean package
 SupportedProducts: Pro
