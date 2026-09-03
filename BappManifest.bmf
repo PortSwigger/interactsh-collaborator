@@ -3,7 +3,7 @@ ExtensionType: 1
 Name: Interactsh Collaborator
 RepoName: interactsh-collaborator
 ScreenVersion: 1.4.0
-SerialVersion: 3
+SerialVersion: 4
 MinPlatformVersion: 30
 ProOnly: True
 Author: Arqsz
