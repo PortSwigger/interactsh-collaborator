@@ -5,20 +5,20 @@
 
     <groupId>interactsh</groupId>
     <artifactId>collaborator</artifactId>
-    <version>1.4.0</version>
+    <version>1.6.0</version>
     <packaging>jar</packaging>
 
     <dependencies>
         <dependency>
             <groupId>net.portswigger.burp.extensions</groupId>
             <artifactId>montoya-api</artifactId>
-            <version>2026.4</version>
+            <version>2026.7</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
-            <version>20260522</version>
+            <version>20260719</version>
         </dependency>
 <dependency>
 			<groupId>org.projectlombok</groupId>

@@ -27,6 +27,10 @@ import burp.api.montoya.http.message.responses.HttpResponse;
 import lombok.Getter;
 
 public class InteractshClient {
+	private static final String SESSION_NOT_FOUND = "could not get correlation-id from cache";
+	// zbase32: the only nonce characters interactsh-server >= 1.4.0 accepts.
+	private static final String NONCE_ALPHABET = "ybndrfg8ejkmcpqxot1uwisza345h769";
+
 	private PrivateKey privateKey;
 	private PublicKey publicKey;
 
@@ -37,6 +41,10 @@ public class InteractshClient {
 	@Getter
 	private final String correlationId;
 	private final String secretKey;
+	private final int nonceLength;
+	private final String testAesMode;
+	private volatile String probeLabel;
+	private volatile boolean probeSeen;
 	private final String pubKeyBase64;
 
 	private String host;
@@ -44,40 +52,58 @@ public class InteractshClient {
 	private boolean scheme;
 	@Getter
 	private volatile boolean registered;
+	@Getter
+	private volatile boolean sessionLost;
+	@Getter
+	private volatile String lastError;
 	private String authorization;
-	private String aesMode;
 
 	public InteractshClient() {
-		this.correlationId = UUID.randomUUID().toString().replace("-", "").substring(0, 20);
+		this(burp.gui.Config.getHost(), savedPort(), burp.gui.Config.getScheme(), burp.gui.Config.getAuth(),
+				burp.gui.Config.getCidLength(), burp.gui.Config.getCidNonceLength(), null);
+	}
+
+	public static InteractshClient forTest(String host, int port, boolean tls, String token, int cidLength,
+			int nonceLength, String aesMode) {
+		return new InteractshClient(host, port, tls, token, cidLength, nonceLength, aesMode);
+	}
+
+	private InteractshClient(String host, int port, boolean tls, String token, int cidLength, int nonceLength,
+			String testAesMode) {
+		this.correlationId = UUID.randomUUID().toString().replace("-", "").substring(0, cidLength);
+		this.nonceLength = nonceLength;
 		this.secretKey = UUID.randomUUID().toString();
+		this.testAesMode = testAesMode;
 
 		KeyPair kp = generateKeys();
 		this.publicKey = kp.getPublic();
 		this.privateKey = kp.getPrivate();
 		this.pubKeyBase64 = Base64.getEncoder().encodeToString(getPublicKey().getBytes(StandardCharsets.UTF_8));
 
-		this.host = burp.gui.Config.getHost();
-		this.scheme = burp.gui.Config.getScheme();
-		this.authorization = burp.gui.Config.getAuth();
-		this.aesMode = burp.gui.Config.getAesMode();
-		try {
-			this.port = Integer.parseInt(burp.gui.Config.getPort());
-		} catch (NumberFormatException ne) {
-			this.port = 443;
+		this.host = host;
+		this.scheme = tls;
+		this.authorization = token;
+		this.port = port;
+	}
+
+	private static int savedPort() {
+		String configuredPort = burp.gui.Config.getPort();
+		String validPort = burp.gui.Config.validPort(configuredPort, burp.gui.Config.getScheme());
+		if (!validPort.equals(configuredPort.trim())) {
+			burp.BurpExtender.api.logging().logToError(
+					"Invalid port '" + configuredPort + "' in Configuration - using " + validPort + " instead.");
 		}
+		return Integer.parseInt(validPort);
 	}
 
 	public boolean register() {
+		this.lastError = null;
 		if (!isExtensionActive())
 			return false;
 
-		try {
-			java.net.InetAddress.getByName(host);
-		} catch (java.net.UnknownHostException e) {
-			if (isExtensionActive()) {
-				burp.BurpExtender.api.logging().logToError(
-						"Cannot resolve host '" + host + "' - please check the server address in Configuration.");
-			}
+		if (!hostResolves()) {
+			this.lastError = "Cannot resolve host '" + host + "' - please check the server address in Configuration.";
+			burp.BurpExtender.api.logging().logToError(lastError);
 			return false;
 		}
 
@@ -105,22 +131,33 @@ public class InteractshClient {
 
 			HttpService httpService = HttpService.httpService(host, port, scheme);
 			HttpRequest httpRequest = HttpRequest.httpRequest(httpService, request);
-			burp.BurpExtender.debugLog("Sending registration request to " + host + ":" + port + " (TLS=" + scheme + ")");
+			burp.BurpExtender
+					.debugLog("Sending registration request to " + host + ":" + port + " (TLS=" + scheme + ")");
 			HttpResponse resp = burp.BurpExtender.api.http().sendRequest(httpRequest).response();
-			burp.BurpExtender.debugLog("Registration response received: " + (resp != null ? resp.statusCode() : "null"));
+			burp.BurpExtender
+					.debugLog("Registration response received: " + (resp != null ? resp.statusCode() : "null"));
 
 			if (resp == null) {
+				this.lastError = "No response from '" + host + ":" + port
+						+ "' - check the port, TLS setting and that the server is running.";
 				if (isExtensionActive()) {
-					burp.BurpExtender.api.logging().logToError(
-							"Registration failed: No response received from server. Check your connection/host settings.");
+					burp.BurpExtender.api.logging().logToError("Registration failed: " + lastError);
 				}
 				return false;
 			}
 
 			if (resp.statusCode() == 200) {
 				this.registered = true;
+				this.sessionLost = false;
 				burp.BurpExtender.debugLog("Session registration was successful.");
 				return true;
+			} else if (resp.statusCode() == 401) {
+				this.lastError = (authorization == null || authorization.isEmpty())
+						? "Server requires a token - set Token in Configuration."
+						: "Server rejected the token - check Token in Configuration.";
+				if (isExtensionActive()) {
+					burp.BurpExtender.api.logging().logToError("Registration failed: " + lastError);
+				}
 			} else {
 				if (isExtensionActive()) {
 					burp.BurpExtender.api.logging().logToError(
@@ -128,14 +165,56 @@ public class InteractshClient {
 				}
 			}
 		} catch (Exception ex) {
+			this.lastError = isUnknownHost(ex)
+					? "Cannot resolve host '" + host + "' - please check the server address in Configuration."
+					: "Registration error: " + ex.getMessage();
 			if (isExtensionActive()) {
-				String msg = (ex instanceof java.net.UnknownHostException)
-						? "Cannot resolve host '" + host + "' - please check the server address in Configuration."
-						: "Registration error: " + ex.getMessage();
-				burp.BurpExtender.api.logging().logToError(msg);
+				burp.BurpExtender.api.logging().logToError(lastError);
 			}
 		}
 		return false;
+	}
+
+	private static boolean isUnknownHost(Throwable ex) {
+		for (Throwable t = ex; t != null; t = t.getCause()) {
+			if (t instanceof java.net.UnknownHostException) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private boolean hostResolves() {
+		try {
+			java.net.InetAddress.getByName(host);
+			return true;
+		} catch (java.net.UnknownHostException e) {
+			return false;
+		}
+	}
+
+	public boolean verifyCallback() {
+		String probeHost = getInteractDomain();
+		this.probeSeen = false;
+		this.probeLabel = probeHost.substring(0, probeHost.indexOf('.'));
+		burp.BurpExtender.debugLog("Verifying session with a test callback to " + probeHost);
+		try {
+			String request = "GET / HTTP/1.1\r\nHost: " + probeHost
+					+ "\r\nUser-Agent: Interact.sh Client\r\nConnection: close\r\n\r\n";
+			burp.BurpExtender.api.http()
+					.sendRequest(HttpRequest.httpRequest(HttpService.httpService(host, port, scheme), request));
+			for (int attempt = 0; attempt < 3 && !probeSeen; attempt++) {
+				if (attempt > 0) {
+					Thread.sleep(500);
+				}
+				poll();
+			}
+		} catch (InterruptedException ex) {
+			Thread.currentThread().interrupt();
+		} catch (Exception ex) {
+			burp.BurpExtender.debugLog("Session verification request failed: " + ex.getMessage());
+		}
+		return probeSeen;
 	}
 
 	public boolean poll() {
@@ -156,13 +235,26 @@ public class InteractshClient {
 
 		String request = requestBuilder.toString();
 
-		HttpService httpService = HttpService.httpService(host, port, scheme);
-		HttpRequest httpRequest = HttpRequest.httpRequest(httpService, request);
-		HttpResponse resp = burp.BurpExtender.api.http().sendRequest(httpRequest).response();
+		HttpResponse resp;
+		try {
+			HttpService httpService = HttpService.httpService(host, port, scheme);
+			HttpRequest httpRequest = HttpRequest.httpRequest(httpService, request);
+			resp = burp.BurpExtender.api.http().sendRequest(httpRequest).response();
+		} catch (Exception ex) {
+			if (isExtensionActive()) {
+				burp.BurpExtender.api.logging().logToError(isUnknownHost(ex)
+						? "Poll failed - cannot resolve host '" + host + "'."
+						: "Poll failed - request error: " + ex.getMessage());
+			}
+			return false;
+		}
 		if (resp == null || resp.statusCode() != 200) {
+			String body = (resp != null) ? resp.bodyToString() : null;
+			this.sessionLost = body != null && body.contains(SESSION_NOT_FOUND);
 			if (isExtensionActive()) {
 				burp.BurpExtender.api.logging().logToError("Poll failed - status: "
-						+ (resp != null ? resp.statusCode() : "no response"));
+						+ (resp != null ? resp.statusCode() : "no response")
+						+ (sessionLost ? " (session unknown to server)" : ""));
 			}
 			return false;
 		}
@@ -180,15 +272,23 @@ public class InteractshClient {
 				JSONArray data = jsonObject.getJSONArray("data");
 				for (int i = 0; i < data.length(); i++) {
 					String decryptedData = decryptData(data.getString(i), key);
-					if (isExtensionActive()) {
+					if (probeLabel != null && decryptedData.contains(probeLabel)) {
+						probeSeen = true;
+						continue;
+					}
+					if (isExtensionActive() && testAesMode == null) {
 						InteractshEntry entry = new InteractshEntry(decryptedData);
 						burp.BurpExtender.addToTable(entry);
 					}
 				}
 			}
+			// Token-scoped interactions (FTP, SMB, Responder, LDAP full logging) are
+			// returned unencrypted in a separate field.
+			addPlainInteractions(jsonObject, "extra", false);
+			addPlainInteractions(jsonObject, "tlddata", true);
 		} catch (Exception ex) {
 			if (isExtensionActive()) {
-				String msg = (ex instanceof java.net.UnknownHostException)
+				String msg = isUnknownHost(ex)
 						? "Cannot resolve host '" + host + "' - please check the server address in Configuration."
 						: "Polling error: " + ex.getMessage();
 				burp.BurpExtender.api.logging().logToError(msg);
@@ -198,7 +298,10 @@ public class InteractshClient {
 	}
 
 	public void deregister() {
-		if (!isExtensionActive())
+		// Runs during unload too, so it only needs the API handle, not an active
+		// extension.
+		burp.api.montoya.MontoyaApi api = burp.BurpExtender.api;
+		if (api == null)
 			return;
 
 		try {
@@ -224,13 +327,22 @@ public class InteractshClient {
 
 			HttpService httpService = HttpService.httpService(host, port, scheme);
 			HttpRequest httpRequest = HttpRequest.httpRequest(httpService, request);
-			burp.BurpExtender.api.http().sendRequest(httpRequest).response();
+			HttpResponse resp = api.http().sendRequest(httpRequest).response();
+			this.registered = false;
+			if (resp == null || resp.statusCode() != 200) {
+				api.logging().logToError("Deregistration failed - status: "
+						+ (resp != null ? resp.statusCode() : "no response"));
+			} else {
+				burp.BurpExtender.debugLog("Session " + correlationId + " deregistered.");
+			}
 		} catch (Exception ex) {
-			if (isExtensionActive()) {
-				String msg = (ex instanceof java.net.UnknownHostException)
+			this.registered = false;
+			try {
+				String msg = isUnknownHost(ex)
 						? "Cannot resolve host '" + host + "' - please check the server address in Configuration."
 						: "Deregister error: " + ex.getMessage();
-				burp.BurpExtender.api.logging().logToError(msg);
+				api.logging().logToError(msg);
+			} catch (Exception ignore) {
 			}
 		}
 	}
@@ -242,12 +354,34 @@ public class InteractshClient {
 			String fullDomain = correlationId;
 
 			Random random = new Random();
-			while (fullDomain.length() < 33) {
-				fullDomain += (char) (random.nextInt(26) + 'a');
+			while (fullDomain.length() < correlationId.length() + nonceLength) {
+				fullDomain += NONCE_ALPHABET.charAt(random.nextInt(NONCE_ALPHABET.length()));
 			}
 
 			fullDomain += "." + host;
 			return fullDomain;
+		}
+	}
+
+	private void addPlainInteractions(JSONObject pollResponse, String field, boolean wildcard) {
+		if (testAesMode != null || pollResponse.isNull(field)) {
+			return;
+		}
+		JSONArray interactions = pollResponse.getJSONArray(field);
+		for (int i = 0; i < interactions.length(); i++) {
+			if (!isExtensionActive())
+				break;
+			try {
+				InteractshEntry entry = new InteractshEntry(interactions.getString(i));
+				if (wildcard && entry.uid.toLowerCase().contains(correlationId)) {
+					continue;
+				}
+				entry.wildcard = wildcard;
+				burp.BurpExtender.addToTable(entry);
+			} catch (Exception ex) {
+				burp.BurpExtender.api.logging()
+						.logToError("Could not parse " + field + " interaction: " + ex.getMessage());
+			}
 		}
 	}
 
@@ -283,7 +417,8 @@ public class InteractshClient {
 	}
 
 	private String decryptData(String input, byte[] key) throws Exception {
-		String mode = (this.aesMode == null || this.aesMode.isEmpty()) ? "AUTO" : this.aesMode.toUpperCase();
+		String configured = (testAesMode != null) ? testAesMode : burp.gui.Config.getAesMode();
+		String mode = (configured == null || configured.isEmpty()) ? "AUTO" : configured.toUpperCase();
 
 		if (!"AUTO".equals(mode)) {
 			return decryptDataWithMode(input, key, mode);
